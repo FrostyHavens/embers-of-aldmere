@@ -117,7 +117,7 @@
         });
       }
       G.textC(ctx, 'An original tactical RPG', G.W / 2, G.H - 22, '#9098c8');
-      G.textC(ctx, 'Z/Enter: OK   X/Esc: Back   C/Shift: Menu   M: Mute', G.W / 2, G.H - 11, '#707aa8');
+      G.textC(ctx, 'Z: OK  X: Back  C: Menu  T: Auto  M: Mute', G.W / 2, G.H - 11, '#707aa8');
     }
   }
   class Controls {
@@ -125,7 +125,7 @@
     update() { if (G.input.p('A') || G.input.p('B')) { G.audio.sfx('cancel'); G.pop(); } }
     draw(ctx) {
       G.win(ctx, 20, 20, G.W - 40, G.H - 40);
-      const L = [['CONTROLS', '#f8e060'], ['Arrow keys / WASD - move, choose', ''], ['Z, Space, Enter - A: confirm, talk, open battle menu', ''], ['X, Esc - B: cancel, undo a move in battle', ''], ['C, Shift - C: field menu; in battle, look at the map', ''], ['M - mute music & sound', ''], ['', ''],
+      const L = [['CONTROLS', '#f8e060'], ['Arrow keys / WASD - move, choose', ''], ['Z, Space, Enter - A: confirm, talk, open battle menu', ''], ['X, Esc - B: cancel, undo a move in battle', ''], ['C, Shift - C: field menu; in battle, look at the map', ''], ['M - mute music & sound', ''], ['T - auto-battle on/off (your units fight by AI)', ''], ['', ''],
       ['IN BATTLE', '#f8e060'], ['Each round, units act in order of agility.', ''], ['Walk your unit inside the flashing area, then', ''], ['press A for Attack, Magic, Item or Stay.', ''], ['Forests & hills give Land Effect: less damage taken.', ''], ['If Rowan falls, the force retreats to the church.', '']];
       L.forEach(([s, c], i) => G.text(ctx, s, 32, 30 + i * 12, c || '#fff'));
     }

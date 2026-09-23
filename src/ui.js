@@ -65,6 +65,7 @@
   // ---------- List menu ----------
   // items: [{label, right?, disabled?, color?}] or strings. opts: {x,y,w,title,cols,onMove(i),maxRows,cancel:true,help(i)->str}
   class ListMenu {
+    cancel() { G.pop(); this.w.resolve(-1); }
     constructor(items, opts, w) {
       this.transparent = true; this.w = w; this.opts = opts || {};
       this.items = items.map(it => typeof it === 'string' ? { label: it } : it);
@@ -118,6 +119,7 @@
   // ---------- 4-way icon menu (SF-style cross) ----------
   // entries: {up:{label, icon}, left:..., right:..., down:...}; returns 'up'/'left'/... or null
   class CrossMenu {
+    cancel() { G.pop(); this.w.resolve(null); }
     constructor(entries, opts, w) { this.transparent = true; this.e = entries; this.opts = opts || {}; this.w = w; this.sel = 'up'; this.t = 0; }
     update() {
       this.t++;

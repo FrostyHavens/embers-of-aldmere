@@ -35,7 +35,7 @@ const KEYMAP = {
   KeyZ: 'A', Space: 'A', Enter: 'A', KeyJ: 'A',
   KeyX: 'B', Escape: 'B', Backspace: 'B', KeyK: 'B',
   KeyC: 'C', ShiftLeft: 'C', ShiftRight: 'C', KeyL: 'C',
-  KeyM: 'M'
+  KeyM: 'M', KeyT: 'T'
 };
 window.addEventListener('keydown', e => {
   const k = KEYMAP[e.code]; if (!k) return;
@@ -122,6 +122,8 @@ function step() {
   if (G.fx.shake > 0) G.fx.shake--;
   if (G.fx.flash > 0) G.fx.flash--;
   for (const k in G.keys) if (G.keys[k]) G.repeatT[k] = (G.repeatT[k] || 0) + 1;
+  if (G.pressed.T && G.toggleAuto) G.toggleAuto();
+  if (G.toastT > 0) G.toastT--;
   G.pressed = {};
   G.audio && G.audio.tick();
 }
@@ -137,7 +139,9 @@ function draw() {
   ctx.restore();
   if (G.fx.flash > 0) { ctx.globalAlpha = Math.min(1, G.fx.flash / 6); ctx.fillStyle = G.fx.flashColor; ctx.fillRect(0, 0, G.W, G.H); ctx.globalAlpha = 1; }
   if (G.fade.a > 0) { ctx.globalAlpha = G.fade.a; ctx.fillStyle = G.fade.color; ctx.fillRect(0, 0, G.W, G.H); ctx.globalAlpha = 1; }
+  if (G.toastT > 0 && G.win) { const w = G.textWidth(G.toastMsg) + 20; ctx.globalAlpha = Math.min(1, G.toastT / 15); G.win(ctx, (G.W - w) / 2, 40, w, 20); G.textC(ctx, G.toastMsg, G.W / 2, 46, '#f8e060'); ctx.globalAlpha = 1; }
 }
+G.toast = (msg, t = 90) => { G.toastMsg = msg; G.toastT = t; };
 G.step = step; G.drawFrame = draw;
 
 let last = performance.now(), acc = 0;
@@ -178,7 +182,7 @@ G.store = {
   const lab = { up: '▲', down: '▼', left: '◀', right: '▶' };
   cells.forEach(k => { const b = document.createElement(k ? 'button' : 'span'); if (k) { b.textContent = lab[k]; b.dataset.k = k; } pad.appendChild(b); });
   const btns = document.createElement('div'); btns.id = 'tcbtn'; btns.className = 'tc';
-  [['C', 'C'], ['B', 'B'], ['A', 'A']].forEach(([k, t]) => { const b = document.createElement('button'); b.textContent = t; b.dataset.k = k; if (k === 'A') b.style.marginBottom = '30px'; btns.appendChild(b); });
+  [['T', 'T'], ['C', 'C'], ['B', 'B'], ['A', 'A']].forEach(([k, t]) => { const b = document.createElement('button'); b.textContent = t; b.dataset.k = k; if (k === 'A') b.style.marginBottom = '30px'; btns.appendChild(b); });
   document.body.appendChild(pad); document.body.appendChild(btns);
   const down = k => { if (!G.keys[k]) { G.pressed[k] = true; G.repeatT[k] = 0; } G.keys[k] = true; G.audio && G.audio.unlock(); };
   const up = k => { G.keys[k] = false; };

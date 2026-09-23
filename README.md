@@ -11,6 +11,7 @@ An original 16-bit-style tactical RPG. It plays by Shining Force II's battle rul
 - Z / Enter / Space: A (confirm, talk, battle menu)
 - X / Esc: B (cancel, undo move)
 - C / Shift: menu, or look around the map in battle
+- T: auto-battle on/off (your units are controlled by the AI; press again to take back control)
 - M: mute
 
 ## Chapter 1 contents

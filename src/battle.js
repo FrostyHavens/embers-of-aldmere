@@ -126,7 +126,7 @@
           yield* this.startTurn(u);
           if (u.gone || u.hp <= 0) { this.checkEnd(); if (this.result) break; continue; }
           if (u.status.sleep) { u.status.sleep--; yield* this.focus(u.x, u.y); yield G.say(u.name + ' is asleep.', { auto: 40 }); continue; }
-          if (u.enemy || G.debugAuto) yield* this.enemyTurn(u); else yield* this.playerTurn(u);
+          if (u.enemy || G.debugAuto || G.autoBattle) yield* this.enemyTurn(u); else yield* this.playerTurn(u);
           this.active = null; this.overlay = null; this.cursor = null; this.area = null;
           if (this.def.onAfterTurn) yield* this.def.onAfterTurn(this, u);
           this.checkEnd();
@@ -169,6 +169,7 @@
         let acted = false;
         while (true) {
           yield 1;
+          if (G.autoBattle && u.ox === 0 && u.oy === 0) { u.x = start[0]; u.y = start[1]; this.overlay = null; this.cursor = null; yield* this.enemyTurn(u); return; }
           const d = G.input.dir();
           if (d && u.ox === 0 && u.oy === 0) {
             const [dx, dy] = G.DIRS[d]; const nx = u.x + dx, ny = u.y + dy;
@@ -213,7 +214,7 @@
     *doMagicCmd(u) {
       while (true) {
         const w = yield G.spellMenu(u);
-        const s = w.result; if (!s) return false;
+        const s = w.result; if (!s || G.autoBattle) return false;
         const sp = D().spells[s.id], L = sp.levels[s.lv - 1];
         if (sp.kind === 'recall') {
           const c = yield G.say('Use Recall to flee to the last church? The battle will be lost but EXP is kept.');
@@ -231,10 +232,10 @@
     *doItemCmd(u) {
       while (true) {
         const w = yield G.itemList(u, { title: u.name + '\'s items' });
-        const idx = w.result; if (idx == null || idx < 0) return false;
+        const idx = w.result; if (idx == null || idx < 0 || G.autoBattle) return false;
         const it = D().items[u.items[idx].id];
         const c = yield G.cross({ up: { label: 'Use', icon: 'use', disabled: it.type !== 'use' }, left: { label: 'Give', icon: 'give' }, right: { label: 'Equip', icon: 'equip', disabled: !G.st.canEquip(u, u.items[idx].id) }, down: { label: 'Drop', icon: 'drop', disabled: it.type === 'key' } }, { x: G.W / 2 - 40, y: G.H - 50 });
-        const op = c.result; if (!op) continue;
+        const op = c.result; if (G.autoBattle) return false; if (!op) continue;
         if (op === 'up') {
           if (it.effect === 'recall') {
             yield G.say('Use the feather to flee to the last church? The battle will be lost but EXP is kept.');
@@ -291,6 +292,7 @@
       this.cursor = { x: targets[0].x, y: targets[0].y }; this.infoTarget = targets[0];
       while (true) {
         yield 1;
+        if (G.autoBattle) { this.overlay = null; this.cursor = null; this.infoTarget = null; return null; }
         const d = G.input.repDir(14, 8);
         if (d) { i = (i + (d === 'up' || d === 'left' ? -1 : 1) + targets.length) % targets.length; G.audio.sfx('cursor'); }
         const t = targets[i]; this.cursor = { x: t.x, y: t.y }; this.infoTarget = t; this.centerOn(t.x, t.y);
@@ -314,6 +316,7 @@
         this.infoTarget = this.unitAt(cx, cy) || null;
         this.centerOn(cx, cy);
         yield 1;
+        if (G.autoBattle) { this.overlay = null; this.cursor = null; this.area = null; this.infoTarget = null; return null; }
         const d = G.input.repDir(12, 6);
         if (d) { const [dx, dy] = G.DIRS[d]; if (inRange.has(key(cx + dx, cy + dy))) { cx += dx; cy += dy; G.audio.sfx('cursor'); } }
         if (G.input.p('A')) {
@@ -332,6 +335,7 @@
       this.overlay = null; this.cursor = { x, y };
       while (true) {
         yield 1;
+        if (G.autoBattle) break;
         const d = G.input.repDir(10, 4);
         if (d) { const [dx, dy] = G.DIRS[d]; this.cursor.x = G.clamp(this.cursor.x + dx, 0, this.map.w - 1); this.cursor.y = G.clamp(this.cursor.y + dy, 0, this.map.h - 1); this.centerOn(this.cursor.x, this.cursor.y); this.overlay = null; }
         this.infoTarget = this.unitAt(this.cursor.x, this.cursor.y) || null;
@@ -392,6 +396,15 @@
       const r = u.ai === 'guard' ? { stop: new Set([key(u.x, u.y)]), prev: new Map(), cost: new Map([[key(u.x, u.y), 0]]) } : this.reach(u);
       let best = null;
       const consider = (score, plan) => { if (!best || score > best.score) best = Object.assign({ score }, plan); };
+      // allies on auto: weigh how many foes could reach a tile (the leader is far more careful)
+      let danger = null;
+      if (OWN === 'ally') {
+        danger = new Map();
+        for (const f of allies) for (const k of this.threatSet(f)) danger.set(k, (danger.get(k) || 0) + 1);
+      }
+      const isLeader = u.id === 'rowan', hurt = u.hp / u.mhp;
+      const riskW = OWN !== 'ally' ? 0 : (isLeader ? (hurt < 0.5 ? 14 : 5) : (hurt < 0.35 ? 6 : 1));
+      const risk = (tx, ty) => danger ? (danger.get(key(tx, ty)) || 0) * riskW : 0;
       const tiles = [...r.stop].map(k => k.split(',').map(Number));
       const rg = R().range(u);
       const spells = R().spellLevelsKnown(u);
@@ -401,7 +414,7 @@
         // physical attacks
         for (const t of this.targetsInRange(u, rg, FOE, tx, ty)) {
           const e = this.expected(u, t, this.map.get(t.x, t.y));
-          let s = e * 3 + (e >= t.hp ? 60 : 0) + (1 - t.hp / t.mhp) * 12 + le / 10 - moveCost * 0.01;
+          let s = e * 3 + (e >= t.hp ? 60 : 0) + (1 - t.hp / t.mhp) * 12 + le / 10 - moveCost * 0.01 - risk(tx, ty);
           if (t.id === 'rowan') s += 6; if (t.boss) s += 4;
           if (R().cls(t) && R().cls(t).healer) s += 4;
           consider(s, { kind: 'attack', tile: [tx, ty], targets: [t] });
@@ -415,7 +428,7 @@
               for (const [cx, cy] of this.tilesInRange(tx, ty, L.range)) {
                 const o = this.unitAt(cx, cy) || ((cx === tx && cy === ty) ? u : null);
                 if (!o || o.side !== OWN || o.hp >= o.mhp * 0.7) continue;
-                const s = (o.mhp - o.hp) * 3 + (o.boss ? 20 : 0) + 30;
+                const s = (o.mhp - o.hp) * 3 + (o.boss ? 20 : 0) + (o.id === 'rowan' ? 25 : 0) + 30 - risk(tx, ty) * 0.5;
                 consider(s, { kind: 'spell', spell: sp.id, lvl: lv, tile: [tx, ty], targets: [o] });
               }
             } else if (S.kind === 'damage' || S.kind === 'poison') {
@@ -425,13 +438,20 @@
                 let s = 0;
                 hit.forEach(o => { const p = S.kind === 'damage' ? L.power : 4; s += p * 3 + (p >= o.hp ? 60 : 0); });
                 s -= L.mp * 0.5; if (S.kind === 'poison' && hit.every(o => o.status.poison)) s = -1;
-                consider(s + 2, { kind: 'spell', spell: sp.id, lvl: lv, tile: [tx, ty], targets: hit });
+                consider(s + 2 - risk(tx, ty), { kind: 'spell', spell: sp.id, lvl: lv, tile: [tx, ty], targets: hit });
               }
             }
           }
         }
       }
-      if (best) { best.path = this.pathTo(r, best.tile[0], best.tile[1]); return best; }
+      if (best && !(OWN === 'ally' && best.score < 0 && hurt < 0.5)) { best.path = this.pathTo(r, best.tile[0], best.tile[1]); return best; }
+      // hurt ally on auto: fall back toward a healer, else the safest tile
+      if (OWN === 'ally' && hurt < 0.5) {
+        const healer = this.alive('ally').find(a => a !== u && R().cls(a) && R().cls(a).healer);
+        let bt = null, bv = Infinity;
+        for (const [tx, ty] of tiles) { const sc = risk(tx, ty) * 10 + (healer ? Math.abs(tx - healer.x) + Math.abs(ty - healer.y) : 0); if (sc < bv) { bv = sc; bt = [tx, ty]; } }
+        if (bt) return { kind: 'none', path: this.pathTo(r, bt[0], bt[1]) };
+      }
       // approach: distance field from allies (terrain-aware, ignoring units)
       if (u.ai === 'guard') return { kind: 'none' };
       const field = new Map(); const open = [];
@@ -447,7 +467,7 @@
         }
       }
       let bt = null, bv = Infinity;
-      for (const [tx, ty] of tiles) { const v = field.has(key(tx, ty)) ? field.get(key(tx, ty)) : Infinity; const le = R().landEffect(u, this.map.get(tx, ty)); const sc = v - le / 100; if (sc < bv) { bv = sc; bt = [tx, ty]; } }
+      for (const [tx, ty] of tiles) { const v = field.has(key(tx, ty)) ? field.get(key(tx, ty)) : Infinity; const le = R().landEffect(u, this.map.get(tx, ty)); const sc = v - le / 100 + risk(tx, ty) * (isLeader ? 0.6 : 0.15); if (sc < bv) { bv = sc; bt = [tx, ty]; } }
       if (!bt) return { kind: 'none' };
       return { kind: 'none', path: this.pathTo(r, bt[0], bt[1]) };
     }
@@ -521,6 +541,7 @@
       if (this.cursor) this.drawBracket(ctx, this.cursor.x * T - cx, this.cursor.y * T - cy, (this.t >> 2) % 2 ? '#ffe040' : '#fff');
       // HUD
       if (this.hud && G.top() === this) this.drawHUD(ctx);
+      if (G.autoBattle && (this.t >> 4) % 4 !== 3) { G.win(ctx, G.W / 2 - 26, 4, 52, 18); G.textC(ctx, 'AUTO', G.W / 2, 9, '#80ff90'); }
     }
     drawBracket(ctx, x, y, col) {
       ctx.fillStyle = col; const T = G.TILE; x = Math.round(x); y = Math.round(y);
@@ -561,6 +582,19 @@
     }
   }
   G.Battle = Battle;
+  // ---------- Auto-battle toggle (T key) ----------
+  G.autoBattle = !!G.store.get('embers_auto');
+  G.toggleAuto = function () {
+    G.autoBattle = !G.autoBattle;
+    G.store.set('embers_auto', G.autoBattle);
+    G.audio.sfx(G.autoBattle ? 'ok' : 'cancel');
+    G.toast('Auto-battle: ' + (G.autoBattle ? 'ON' : 'OFF') + '   (T)');
+    // close any open battle menus so the AI can take over this turn
+    if (G.autoBattle && G.scenes[0] instanceof Battle) {
+      let guard = 10;
+      while (guard-- > 0 && G.top() !== G.scenes[0] && typeof G.top().cancel === 'function') G.top().cancel();
+    }
+  };
   G.battles = {};
   G.startBattle = function (id, opts) { const b = new Battle(id, opts); G.replace(b); return b; };
 })();

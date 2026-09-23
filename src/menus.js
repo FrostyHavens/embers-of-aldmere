@@ -5,6 +5,7 @@
 
   // ---------- Status screen ----------
   class StatusScreen {
+    cancel() { G.pop(); this.w.resolve(); }
     constructor(u, w) { this.u = u; this.w = w; this.t = 0; this.transparent = false; }
     update() { this.t++; if (G.input.p('A') || G.input.p('B') || G.input.p('C')) { G.audio.sfx('cancel'); G.pop(); this.w.resolve(); } }
     draw(ctx) {
@@ -51,6 +52,7 @@
 
   // ---------- Spell menu (list + level with left/right) ----------
   class SpellMenu {
+    cancel() { G.pop(); this.w.resolve(null); }
     constructor(u, opts, w) {
       this.u = u; this.w = w; this.opts = opts || {}; this.transparent = true; this.t = 0;
       this.list = R().spellLevelsKnown(u).filter(s => !this.opts.field || D().spells[s.id].field || D().spells[s.id].kind === 'heal' || D().spells[s.id].kind === 'cure');
